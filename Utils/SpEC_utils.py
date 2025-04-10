@@ -74,7 +74,7 @@ def calculate_J_cap(Q_all:pd.DataFrame, scan_rate:float=0.01)->pd.DataFrame:
 
 def calculate_BEP_cat_current(all_thetas:pd.DataFrame, alpha:float=0.5)->pd.DataFrame:
     theta=all_thetas.iloc[:,-1]
-    J_cat=np.exp(-13)*theta*np.exp(-(alpha*-0.8*theta)/0.059)
+    J_cat=np.exp(-14.5)*theta*np.exp(-(alpha*-0.8*theta)/0.059)
     return pd.DataFrame(J_cat)
 
 def calculate_current(all_thetas:pd.DataFrame, Q_max_all:list, scan_rate:float=0.01)->pd.DataFrame:
@@ -101,22 +101,6 @@ def str_exp_dec(t:float, a:float, b:float, c= 0, alpha:float=0.2)->float:
 
 def linear_decay(t:float, a:float, b:float)->float:
     return a-b*t
-
-def get_nearest_value_to_index(input_df:pd.DataFrame, value:float)->float:
-    index_val=(np.abs(input_df.index.values-value)).argmin()
-    return input_df.iloc[index_val]
-
-
-def Q_for_component_in_U_window(comp: int, U1: float, U2: float, Q_all: pd.DataFrame) -> float:
-    # get the Q values for the component
-    Q = Q_all.iloc[:, comp]
-    # get the Q values closest to U1 and U2
-    Q_U1 = get_nearest_value_to_index(Q, U1)
-    Q_U2 = get_nearest_value_to_index(Q, U2)
-    #print(Q_U1, Q_U2)
-    # return the sum of Q values in the window
-
-    return np.round((Q_U2 - Q_U1),5)
 
 
 def piecewise_exp_dec(t: np.ndarray, a: float, b: float, t1: float, t2: float) -> np.ndarray:
@@ -153,8 +137,6 @@ def piecewise_exp_rise_str_exp_dec_integrated(t: np.ndarray, a: float, a1:float,
     #Q=np.where(Q<0,0,Q)
     return Q
 
-
-
 def max_PW_exp_dec_integrated(t: np.ndarray, a: float, b: float, t1: float, t2: float) -> float:
     return piecewise_exp_dec_integrated(t, a, b, t1, t2).max()
 
@@ -166,6 +148,24 @@ def calculate_a_for_Q(Q:float, t:float,  b:float, t1:float, t2:float,a_start:flo
     def pw_max_wrapper(a):
         return max_PW_exp_dec_integrated(t, a, b, t1, t2)-Q
     return fsolve(pw_max_wrapper, a_start)[0]
+
+
+def get_nearest_value_to_index(input_df:pd.DataFrame, value:float)->float:
+    index_val=(np.abs(input_df.index.values-value)).argmin()
+    return input_df.iloc[index_val]
+
+
+def Q_for_component_in_U_window(comp: int, U1: float, U2: float, Q_all: pd.DataFrame) -> float:
+    # get the Q values for the component
+    Q = Q_all.iloc[:, comp]
+    # get the Q values closest to U1 and U2
+    Q_U1 = get_nearest_value_to_index(Q, U1)
+    Q_U2 = get_nearest_value_to_index(Q, U2)
+    #print(Q_U1, Q_U2)
+    # return the sum of Q values in the window
+
+    return np.round((Q_U2 - Q_U1),5)
+
 
 
 def get_nearest_spectrum_to_U(SpEC:pd.DataFrame, U:float)->pd.array:
@@ -190,14 +190,18 @@ def PW_J_for_U1_U2(U1:float, U2:float, Q_all:pd.DataFrame, t:np.array, b:float, 
 
     return pd.DataFrame(J, index=t)
 
-def calculate_PD_dynamics_at_U2(U2:float, U1:float, all_thetas:pd.DataFrame, Q_all:pd.DataFrame, t:np.array, b:float=0.5, b1:float=0.1, t1:float=10, t2:float=60, plotbool:bool=False)->tuple[pd.DataFrame]:
+def calculate_PD_dynamics_at_U2(U2:float, U1:float, all_thetas:pd.DataFrame, Q_all:pd.DataFrame, t:np.array, b:float=0.5, b1:float=0.1, t1:float=10, t2:float=60, plotbool:bool=False, choose_component:bool|None=None)->tuple[pd.DataFrame]:
     J=calculate_BEP_cat_current(all_thetas)
     JBEP=get_nearest_value_to_index(J, U2).values[0]
     # fraction_to_decay=0.5
-    Q_step=Q_for_component_in_U_window(Q_all.shape[1]-1, U1, U2, Q_all)
+    if choose_component is None:
+        Q_step=Q_for_component_in_U_window(Q_all.shape[1]-1, U1, U2, Q_all)
+    else:
+        Q_step=Q_for_component_in_U_window(choose_component, U1, U2, Q_all)
     # print(f'U2 is {U2}, JBEP is {JBEP}, Qstep is {Q_step}')
     a1t=JBEP
-    a_Q=calculate_a_for_Q(Q=Q_step,t=t,b=1,t1=t1,t2=t2)
+    # a_Q=calculate_a_for_Q(Q=Q_step,t=t,b=1,t1=t1,t2=t2)
+    a_Q=Q_step/10
     # print(f'a_Q is {a_Q}')
     PDJt=piecewise_exp_rise_str_exp_dec(t=t, a=a_Q, a1=a1t,  b=b, b1=b1,  t1=t1, t2=t2)
     PDQt=piecewise_exp_rise_str_exp_dec_integrated(t=t, a=a_Q, a1=a1t,  b=b, b1=b1, t1=t1, t2=t2)
@@ -205,26 +209,27 @@ def calculate_PD_dynamics_at_U2(U2:float, U1:float, all_thetas:pd.DataFrame, Q_a
         fig, ax = plt.subplots(2,1 )
         ax[0].plot(t, PDJt)
         ax[1].plot(t, PDQt)
+        ax[1].axhline(y=Q_step, color='r', linestyle='--')
         #add horizontal line at JBEP
         ax[0].axhline(y=-1*JBEP, color='r', linestyle='--')
     return t, PDQt, PDJt
 
 
-    #a1=test_a1_for_Q(Q=Q,t=t,b1=b1,a_1_start=0, t2=t2)
+    # #a1=test_a1_for_Q(Q=Q,t=t,b1=b1,a_1_start=0, t2=t2)
     
  
 
-    print(f'Q is {Q},a is {a},a1 is {a1}, b1 is {b1}')
+    # print(f'Q is {Q},a is {a},a1 is {a1}, b1 is {b1}')
 
-    J=piecewise_exp_rise_str_exp_dec(t=t, a=a, a1=a1, b=b, b1=b1, t1=t1, t2=t2)
+    # J=piecewise_exp_rise_str_exp_dec(t=t, a=a, a1=a1, b=b, b1=b1, t1=t1, t2=t2)
 
-    Q_rise=J[t<t2].cumsum()[-1]
-    Q_fall=J[t>t2].cumsum()[-1]
+    # Q_rise=J[t<t2].cumsum()[-1]
+    # Q_fall=J[t>t2].cumsum()[-1]
 
-    print(f'riseQ {Q_rise}, fallQ={Q_fall}')
+    # print(f'riseQ {Q_rise}, fallQ={Q_fall}')
 
 
-    return J
+    # return J
 
 
 
@@ -246,7 +251,7 @@ def PD_SpEC(SpEC:pd.DataFrame,U1:float, U2:float, all_thetas:pd.DataFrame, Q_all
     2. calculates the PD_J for U1 and U2
     3. Uses np.outer to calculate the PD_Spec time evolution"""
     SpEC_diff=pd.DataFrame(get_diff_U1_U2(SpEC, U1, U2))
-    t, PDQt, PDJt=calculate_PD_dynamics_at_U2(U2, U1, all_thetas, Q_all, t, b, b1, t1, t2)
+    _, PDQt, PDJt=calculate_PD_dynamics_at_U2(U2, U1, all_thetas, Q_all, t, b, b1, t1, t2)
     PDQt_n=(PDQt-PDQt.min())/(PDQt.max()-PDQt.min())
     PD_Spec=np.outer(SpEC_diff, PDQt_n)
     return pd.DataFrame(PD_Spec, index=SpEC.index, columns=t)
