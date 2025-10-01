@@ -8,7 +8,7 @@
 
 1. clone this repository
 2. Switch to the full functionality branch
-3. Install all needed dependencies
+3. Install all needed dependencies - see the requirements.txt file
 4. run main.ipynb
 5. run fig1.ipynb - fig4.ipynb in that order
 
