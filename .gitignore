@@ -1,3 +1,14 @@
 *.parquet
 *.csv
 *.pyc
+# ignore python environment files
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+ENV/
+
+# ignore Mac cache
+.DS_Store
+.vscode/
